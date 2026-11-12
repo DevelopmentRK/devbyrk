@@ -77,8 +77,6 @@ local RK = {
         panic      = false;
         tbOn       = false;
         avOn       = false;
-        avatarOn   = false;
-        animOn     = false;
         m1         = false;
         fireGen    = 0;
         acquiredAt = 0;
@@ -374,8 +372,6 @@ local BINDS = {
     tb     = parseBind(KB["Trigger Bot"]);
     av     = parseBind(AV.Key or KB["Aim View"]);
     panic  = parseBind(KB.Panic or (MAIN.Panic and MAIN.Panic.Key));
-    avatar = parseBind(AVATAR.Key or KB.Avatar);
-    anim   = parseBind(ANIM.Key or KB.Animations);
 }
 
 local function bindDown(bind)
@@ -552,7 +548,14 @@ local function sameCrew(plr)
 end
 
 local function resolveUserId(q)
-    if not q or q == "" then
+    if type(q) == "number" then
+        return q
+    end
+    if type(q) ~= "string" then
+        return nil
+    end
+    q = q:gsub("^%s+", ""):gsub("%s+$", ""):gsub("^@", "")
+    if q == "" then
         return nil
     end
     if RK.cache.userid[q] then
@@ -562,6 +565,15 @@ local function resolveUserId(q)
     if n then
         RK.cache.userid[q] = n
         return n
+    end
+    local low = string.lower(q)
+    local list = Players:GetPlayers()
+    for i = 1, #list do
+        local p = list[i]
+        if string.lower(p.Name) == low then
+            RK.cache.userid[q] = p.UserId
+            return p.UserId
+        end
     end
     local id
     pcall(function()
@@ -1074,12 +1086,70 @@ local function stepAimView()
 end
 
 local ANIM_KEYS = {
-    Walk = {"walk", "WalkAnim"};
-    Run  = {"run", "RunAnim"};
-    Idle = {"idle", "Animation1", "IdleAnim"};
-    Jump = {"jump", "JumpAnim"};
-    Fall = {"fall", "FallAnim"};
+    Walk  = {"walk", "WalkAnim"};
+    Run   = {"run", "RunAnim"};
+    Idle  = {"idle", "Animation1", "IdleAnim"};
+    Jump  = {"jump", "JumpAnim"};
+    Fall  = {"fall", "FallAnim"};
+    Climb = {"climb", "ClimbAnim"};
+    Swim  = {"swim", "Swim"};
 }
+
+local PACKS = {
+    astronaut = {Walk=891636393; Run=891636393; Jump=891627522; Idle=891621366; Fall=891617961; Climb=891609353; Swim=891639666};
+    bubbly    = {Walk=910034870; Run=910025107; Jump=910016857; Idle=910004836; Fall=910001910; Climb=909997997; Swim=910028158};
+    cartoony  = {Walk=742640026; Run=742638842; Jump=742637942; Idle=742637544; Fall=742637151; Climb=742636889; Swim=742639220};
+    elder     = {Walk=845403856; Run=845386501; Jump=845398858; Idle=845397899; Fall=845396048; Climb=845392038; Swim=845401742};
+    knight    = {Walk=657552124; Run=657564596; Jump=658409194; Idle=657595757; Fall=657600338; Climb=658360781; Swim=657560551};
+    levitation= {Walk=616013216; Run=616010382; Jump=616008936; Idle=616006778; Fall=616005863; Climb=616003713; Swim=616011509};
+    mage      = {Walk=707897309; Run=707861613; Jump=707853694; Idle=707742142; Fall=707829716; Climb=707826056; Swim=707876443};
+    ninja     = {Walk=656121766; Run=656118852; Jump=656117878; Idle=656117400; Fall=656115606; Climb=656114359; Swim=656119721};
+    pirate    = {Walk=750785693; Run=750783738; Jump=750782230; Idle=750781874; Fall=750780242; Climb=750779899; Swim=750784579};
+    robot     = {Walk=616095330; Run=616091570; Jump=616090535; Idle=616088211; Fall=616087089; Climb=616086039; Swim=616092998};
+    rthro     = {Walk=2510202577; Run=2510198475; Jump=2510197830; Idle=2510197257; Fall=2510195892; Climb=2510192778; Swim=2510199791};
+    stylish   = {Walk=616146177; Run=616140816; Jump=616139451; Idle=616136790; Fall=616134815; Climb=616133594; Swim=616143378};
+    superhero = {Walk=616122287; Run=616117076; Jump=616115533; Idle=616111295; Fall=616108001; Climb=616104706; Swim=616119360};
+    toy       = {Walk=782843345; Run=782842708; Jump=782847020; Idle=782841498; Fall=782846423; Climb=782843869; Swim=782844582};
+    vampire   = {Walk=1083473930; Run=1083462077; Jump=1083455352; Idle=1083445855; Fall=1083443588; Climb=1083435858; Swim=1083462077};
+    zombie    = {Walk=616168032; Run=616163682; Jump=616161997; Idle=616158929; Fall=616157476; Climb=616156119; Swim=616165109};
+    werewolf  = {Walk=1083188343; Run=1083178339; Jump=1083185231; Idle=1083173789; Fall=1083171281; Climb=1083173283; Swim=1083182912};
+}
+
+local function packKey(s)
+    s = string.lower(tostring(s or ""))
+    s = s:gsub("animation pack", ""):gsub("animations", ""):gsub("pack", "")
+    s = s:gsub("[^%w]", "")
+    return s
+end
+
+local function parseAnimId(raw, slot, packName)
+    if type(raw) == "number" and raw > 0 then
+        return raw
+    end
+    if type(raw) == "string" then
+        local s = raw:gsub("^%s+", ""):gsub("%s+$", "")
+        if s ~= "" and s ~= "0" then
+            local num = s:match("(%d+)")
+            if num and (s:lower():find("rbxassetid", 1, true) or tonumber(s) == tonumber(num)) then
+                return tonumber(num)
+            end
+            local key = packKey(s)
+            if PACKS[key] and PACKS[key][slot] then
+                return PACKS[key][slot]
+            end
+            for name, pack in pairs(PACKS) do
+                if key == name .. string.lower(slot) or key == string.lower(slot) .. name then
+                    return pack[slot]
+                end
+            end
+        end
+    end
+    local pk = packKey(packName)
+    if pk ~= "" and PACKS[pk] then
+        return PACKS[pk][slot]
+    end
+    return nil
+end
 
 local function setAnimId(animate, names, id)
     if not id or id == 0 then
@@ -1089,8 +1159,11 @@ local function setAnimId(animate, names, id)
     local function apply(obj)
         if obj:IsA("Animation") then
             obj.AnimationId = asset
-        elseif obj:IsA("StringValue") and (string.find(string.lower(obj.Name), "anim") or string.find(obj.Value, "rbxassetid")) then
-            obj.Value = asset
+        elseif obj:IsA("StringValue") then
+            local n = string.lower(obj.Name)
+            if n:find("anim", 1, true) or tostring(obj.Value):find("rbxassetid", 1, true) then
+                obj.Value = asset
+            end
         end
     end
     for _, n in ipairs(names) do
@@ -1106,21 +1179,39 @@ local function setAnimId(animate, names, id)
 end
 
 local function applyAnimations(model)
-    if not (ANIM.Enabled or RK.state.animOn) then
+    local A = (getgenv().rk and getgenv().rk.Animations) or ANIM
+    if not A or not A.Enabled then
         return
     end
     local animate = model:FindFirstChild("Animate")
     if not animate then
+        animate = model:WaitForChild("Animate", 3)
+    end
+    if not animate then
         return
     end
-    setAnimId(animate, ANIM_KEYS.Walk, ANIM.Walk)
-    setAnimId(animate, ANIM_KEYS.Run,  ANIM.Run)
-    setAnimId(animate, ANIM_KEYS.Idle, ANIM.Idle)
-    setAnimId(animate, ANIM_KEYS.Jump, ANIM.Jump)
-    setAnimId(animate, ANIM_KEYS.Fall, ANIM.Fall)
+    local pack = A.Pack
+    setAnimId(animate, ANIM_KEYS.Walk,  parseAnimId(A.Walk,  "Walk",  pack))
+    setAnimId(animate, ANIM_KEYS.Run,   parseAnimId(A.Run,   "Run",   pack))
+    setAnimId(animate, ANIM_KEYS.Idle,  parseAnimId(A.Idle,  "Idle",  pack))
+    setAnimId(animate, ANIM_KEYS.Jump,  parseAnimId(A.Jump,  "Jump",  pack))
+    setAnimId(animate, ANIM_KEYS.Fall,  parseAnimId(A.Fall,  "Fall",  pack))
+    setAnimId(animate, ANIM_KEYS.Climb, parseAnimId(A.Climb, "Climb", pack))
+    setAnimId(animate, ANIM_KEYS.Swim,  parseAnimId(A.Swim,  "Swim",  pack))
+    pcall(function()
+        animate.Disabled = true
+        animate.Disabled = false
+    end)
 end
 
+local SCALE_NAMES = {
+    "BodyWidthScale", "BodyHeightScale", "BodyDepthScale",
+    "HeadScale", "BodyProportionScale", "BodyTypeScale"
+}
+
 local function stealAppearance(model, dummy)
+    local hum = humOf(model)
+    local dhum = humOf(dummy)
     local classes = {"Shirt", "Pants", "ShirtGraphic", "BodyColors"}
     for i = 1, #classes do
         local src = dummy:FindFirstChildOfClass(classes[i])
@@ -1143,19 +1234,61 @@ local function stealAppearance(model, dummy)
     for i = 1, #dkids do
         local ch = dkids[i]
         if ch:IsA("Accessory") or ch:IsA("Hat") then
-            ch:Clone().Parent = model
+            local clone = ch:Clone()
+            if hum then
+                pcall(function()
+                    hum:AddAccessory(clone)
+                end)
+            end
+            if clone.Parent ~= model then
+                clone.Parent = model
+            end
         end
     end
-    local hum = humOf(model)
-    local dhum = humOf(dummy)
+    local dHead = dummy:FindFirstChild("Head")
+    local mHead = model:FindFirstChild("Head")
+    if dHead and mHead then
+        local face = dHead:FindFirstChild("face") or dHead:FindFirstChildOfClass("Decal")
+        if face then
+            local old = mHead:FindFirstChild("face") or mHead:FindFirstChildOfClass("Decal")
+            if old then
+                old:Destroy()
+            end
+            face:Clone().Parent = mHead
+        end
+    end
+    if hum and dhum and hum.RigType == Enum.HumanoidRigType.R15 and dhum.RigType == Enum.HumanoidRigType.R15 then
+        local items = Enum.BodyPartR15:GetEnumItems()
+        for i = 1, #items do
+            local bp = items[i]
+            if bp ~= Enum.BodyPartR15.Unknown and bp ~= Enum.BodyPartR15.RootPart then
+                local part = dummy:FindFirstChild(bp.Name)
+                if part and part:IsA("BasePart") then
+                    pcall(function()
+                        hum:ReplaceBodyPartR15(bp, part:Clone())
+                    end)
+                end
+            end
+        end
+    else
+        local meshes = dummy:GetChildren()
+        for i = 1, #meshes do
+            local ch = meshes[i]
+            if ch:IsA("CharacterMesh") then
+                local olds = model:GetChildren()
+                for j = 1, #olds do
+                    if olds[j]:IsA("CharacterMesh") and olds[j].BodyPart == ch.BodyPart then
+                        olds[j]:Destroy()
+                    end
+                end
+                ch:Clone().Parent = model
+            end
+        end
+    end
     if hum and dhum then
-        local scales = {
-            "BodyWidthScale", "BodyHeightScale", "BodyDepthScale",
-            "HeadScale", "BodyProportionScale", "BodyTypeScale"
-        }
-        for i = 1, #scales do
-            local a = hum:FindFirstChild(scales[i])
-            local b = dhum:FindFirstChild(scales[i])
+        for i = 1, #SCALE_NAMES do
+            local a = hum:FindFirstChild(SCALE_NAMES[i])
+            local b = dhum:FindFirstChild(SCALE_NAMES[i])
             if a and b then
                 a.Value = b.Value
             end
@@ -1164,10 +1297,11 @@ local function stealAppearance(model, dummy)
 end
 
 local function applyAvatar(model)
-    if not (AVATAR.Enabled or RK.state.avatarOn) then
+    local A = (getgenv().rk and getgenv().rk.Avatar) or AVATAR
+    if not A or not A.Enabled then
         return
     end
-    local id = resolveUserId(AVATAR.Target)
+    local id = resolveUserId(A.Target)
     if not id then
         return
     end
@@ -1175,35 +1309,45 @@ local function applyAvatar(model)
     if not hum then
         return
     end
-    local desc
-    pcall(function()
-        desc = Players:GetHumanoidDescriptionFromUserId(id)
-    end)
-    if not desc then
-        return
-    end
-    pcall(function()
-        desc.IdleAnimation = 0
-        desc.WalkAnimation = 0
-        desc.RunAnimation = 0
-        desc.JumpAnimation = 0
-        desc.FallAnimation = 0
-        desc.ClimbAnimation = 0
-        desc.SwimAnimation = 0
-    end)
     local dummy
     pcall(function()
-        dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+        dummy = Players:CreateHumanoidModelFromUserId(id)
     end)
+    if not dummy then
+        local desc
+        pcall(function()
+            desc = Players:GetHumanoidDescriptionFromUserId(id)
+        end)
+        if desc then
+            pcall(function()
+                desc.IdleAnimation = 0
+                desc.WalkAnimation = 0
+                desc.RunAnimation = 0
+                desc.JumpAnimation = 0
+                desc.FallAnimation = 0
+                desc.ClimbAnimation = 0
+                desc.SwimAnimation = 0
+            end)
+            pcall(function()
+                dummy = Players:CreateHumanoidModelFromDescription(desc, hum.RigType)
+            end)
+            pcall(function()
+                hum:ApplyDescription(desc)
+            end)
+        end
+    end
     if dummy then
+        dummy.Name = "rk_av"
+        dummy.Parent = Workspace
+        pcall(function()
+            dummy:PivotTo(CFrame.new(0, 10000, 0))
+        end)
+        task.wait(0.45)
         stealAppearance(model, dummy)
         dummy:Destroy()
-    else
-        pcall(function()
-            hum:ApplyDescription(desc)
-        end)
     end
-    if ANIM.Enabled or RK.state.animOn then
+    local AN = (getgenv().rk and getgenv().rk.Animations) or ANIM
+    if AN and AN.Enabled then
         applyAnimations(model)
     end
 end
@@ -1227,18 +1371,22 @@ local function onCharacter(model)
         model:WaitForChild("Humanoid", 10)
         model:WaitForChild("HumanoidRootPart", 10)
         task.wait(0.35)
-        if AVATAR["Apply On Respawn"] then
+        local Av = (getgenv().rk and getgenv().rk.Avatar) or AVATAR
+        local An = (getgenv().rk and getgenv().rk.Animations) or ANIM
+        if Av and Av.Enabled and Av["Apply On Respawn"] ~= false then
             applyAvatar(model)
         end
-        if ANIM["Apply On Respawn"] then
+        if An and An.Enabled and An["Apply On Respawn"] ~= false then
             applyAnimations(model)
         end
         task.wait(1.1)
         if model.Parent then
-            if AVATAR["Apply On Respawn"] then
+            Av = (getgenv().rk and getgenv().rk.Avatar) or AVATAR
+            An = (getgenv().rk and getgenv().rk.Animations) or ANIM
+            if Av and Av.Enabled and Av["Apply On Respawn"] ~= false then
                 applyAvatar(model)
             end
-            if ANIM["Apply On Respawn"] then
+            if An and An.Enabled and An["Apply On Respawn"] ~= false then
                 applyAnimations(model)
             end
         end
@@ -1335,22 +1483,6 @@ track(UserInputService.InputBegan:Connect(function(input, gp)
         end
         RK.state.aimTarget = closestToCursor() or playerFromQuery(AV.Target)
     end
-    if inputMatches(BINDS.avatar, input) then
-        RK.state.avatarOn = not RK.state.avatarOn
-        AVATAR.Enabled = RK.state.avatarOn
-        local model = charOf(LP)
-        if model and RK.state.avatarOn then
-            task.spawn(applyAvatar, model)
-        end
-    end
-    if inputMatches(BINDS.anim, input) then
-        RK.state.animOn = not RK.state.animOn
-        ANIM.Enabled = RK.state.animOn
-        local model = charOf(LP)
-        if model and RK.state.animOn then
-            applyAnimations(model)
-        end
-    end
 end))
 
 local list0 = Players:GetPlayers()
@@ -1443,5 +1575,9 @@ if AV.Mode == "Always" then
     RK.state.avOn = true
     RK.state.aimTarget = playerFromQuery(AV.Target)
 end
-RK.state.avatarOn = AVATAR.Enabled == true
-RK.state.animOn = ANIM.Enabled == true
+if AVATAR.Enabled and LP.Character then
+    task.spawn(applyAvatar, LP.Character)
+end
+if ANIM.Enabled and LP.Character then
+    task.spawn(applyAnimations, LP.Character)
+end
